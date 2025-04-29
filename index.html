@@ -1,22 +1,520 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>My test page</title>
-    <link href="styles/style.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet">
-  </head>
-  <body>
-    <h1> Dashboard </h1>
-    <p> your account appears here  </p>
-    <ul>
-      <li> Rohit Value </li>
-      <li> Parul Value </li>
-    </ul>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venture Fund Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-router-dom@6.26.2/dist/umd/react-router-dom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-chartjs-2@5.2.0/dist/index.umd.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { createClient } = Supabase;
+    const { BrowserRouter, Routes, Route, Link, useNavigate, useParams } = ReactRouterDOM;
+    const { Line } = ReactChartJs2;
 
-    <img src="images/nandadevi.jpeg" alt="My test image">
-    <button>Change user</button>
+    // Supabase Client Initialization
+    const supabase = createClient(
+      'https://adlrdzqeycykcxhgwzre.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkbHJkenFleWN5a2N4aGd3enJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5MTkyNDIsImV4cCI6MjA2MTQ5NTI0Mn0.XlHOHIiktggiiuTQr76eEdn0t4ZwXn_ltHPAcQYE5sg'
+    );
 
-    <script src="scripts/main.js"></script>
-  </body>
+    // Navigation Component
+    function Navbar() {
+      return (
+        <nav className="bg-gray-800 p-4">
+          <ul className="flex space-x-4 text-white">
+            <li><Link to="/" className="hover:underline">Dashboard</Link></li>
+            <li><Link to="/employees" className="hover:underline">Manage Employees</Link></li>
+            <li><Link to="/performance" className="hover:underline">Performance Reviews</Link></li>
+          </ul>
+        </nav>
+      );
+    }
+
+    // Dashboard Component
+    function Dashboard() {
+      const [stats, setStats] = React.useState({
+        activeEmployees: 0,
+        totalSalary: 0,
+        bonusThisYear: 0,
+        bonusLastYear: 0
+      });
+
+      React.useEffect(() => {
+        async function fetchStats() {
+          const currentYear = new Date().getFullYear();
+          const { data: employees } = await supabase
+            .from('employees')
+            .select('employee_id')
+            .is('terminations.termination_id', null)
+            .leftJoin('terminations', 'employees.employee_id', 'terminations.employee_id');
+
+          const { data: comp } = await supabase
+            .from('compensation_packages')
+            .select('base_salary, annual_bonus, effective_date');
+
+          const totalSalary = comp.reduce((sum, c) => sum + c.base_salary, 0);
+          const bonusThisYear = comp
+            .filter(c => new Date(c.effective_date).getFullYear() === currentYear)
+            .reduce((sum, c) => sum + (c.annual_bonus || 0), 0);
+          const bonusLastYear = comp
+            .filter(c => new Date(c.effective_date).getFullYear() === currentYear - 1)
+            .reduce((sum, c) => sum + (c.annual_bonus || 0), 0);
+
+          setStats({
+            activeEmployees: employees.length,
+            totalSalary,
+            bonusThisYear,
+            bonusLastYear
+          });
+        }
+        fetchStats();
+      }, []);
+
+      return (
+        <div className="p-6">
+          <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white p-4 shadow rounded">
+              <h2 className="text-lg font-semibold">Active Employees</h2>
+              <p className="text-2xl">{stats.activeEmployees}</p>
+            </div>
+            <div className="bg-white p-4 shadow rounded">
+              <h2 className="text-lg font-semibold">Total Salary Bill</h2>
+              <p className="text-2xl">${stats.totalSalary.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-4 shadow rounded">
+              <h2 classNamespacedefault="text-lg font-semibold">Bonuses This Year ({new Date().getFullYear()})</h2>
+              <p className="text-2xl">${stats.bonusThisYear.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-4 shadow rounded">
+              <h2 className="text-lg font-semibold">Bonuses Last Year ({new Date().getFullYear() - 1})</h2>
+              <p className="text-2xl">${stats.bonusLastYear.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Employee Management Component
+    function EmployeeForm() {
+      const navigate = useNavigate();
+      const { employeeId } = useParams();
+      const [formData, setFormData] = React.useState({
+        name: '', title: '', email: '', phone: '', join_date: ''
+      });
+      const [isEdit, setIsEdit] = React.useState(false);
+
+      React.useEffect(() => {
+        if (employeeId) {
+          async function fetchEmployee() {
+            const { data } = await supabase
+              .from('employees')
+              .select('*')
+              .eq('employee_id', employeeId)
+              .single();
+            setFormData(data);
+            setIsEdit(true);
+          }
+          fetchEmployee();
+        }
+      }, [employeeId]);
+
+      const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (isEdit) {
+          await supabase
+            .from('employees')
+            .update(formData)
+            .eq('employee_id', employeeId);
+        } else {
+          await supabase
+            .from('employees')
+            .insert(formData);
+        }
+        navigate('/employees');
+      };
+
+      return (
+        <div className="p-6 max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold mb-4">{isEdit ? 'Update Employee' : 'Add Employee'}</h1>
+          <div className="space-y-4">
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="Name"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="Title"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="Email"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <input
+              type="tel"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="Phone"
+              className="w-full p-2 border rounded"
+            />
+            <input
+              type="date"
+              name="join_date"
+              value={formData.join_date}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            />
+            <button
+              onClick={handleSubmit}
+              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+            >
+              {isEdit ? 'Update' : 'Add'} Employee
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Employee List Component
+    function EmployeeList() {
+      const [employees, setEmployees] = React.useState([]);
+
+      React.useEffect(() => {
+        async function fetchEmployees() {
+          const { data } = await supabase
+            .from('employees')
+            .select('*');
+          setEmployees(data);
+        }
+        fetchEmployees();
+      }, []);
+
+      return (
+        <div className="p-6">
+          <h1 className="text-2xl font-bold mb-4">Employees</h1>
+          <Link to="/employees/add" className="mb-4 inline-block bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+            Add Employee
+          </Link>
+          <table className="w-full bg-white shadow rounded">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="p-2 text-left">Name</th>
+                <th className="p-2 text-left">Title</th>
+                <th className="p-2 text-left">Email</th>
+                <th className="p-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map(emp => (
+                <tr key={emp.employee_id}>
+                  <td className="p-2">{emp.name}</td>
+                  <td className="p-2">{emp.title}</td>
+                  <td className="p-2">{emp.email}</td>
+                  <td className="p-2">
+                    <Link to={`/employees/edit/${emp.employee_id}`} className="text-blue-600 hover:underline">Edit</Link>
+                    {' | '}
+                    <Link to={`/employees/view/${emp.employee_id}`} className="text-blue-600 hover:underline">View</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // Performance Review Form Component
+    function PerformanceReviewForm() {
+      const navigate = useNavigate();
+      const [formData, setFormData] = React.useState({
+        employee_id: '',
+        review_year: new Date().getFullYear(),
+        performance_rating: 'Meets Expectations',
+        review_form_url: '',
+        new_title: '',
+        base_salary: '',
+        annual_bonus: '',
+        joining_bonus: '',
+        retention_bonus: ''
+      });
+      const [employees, setEmployees] = React.useState([]);
+
+      React.useEffect(() => {
+        async function fetchEmployees() {
+          const { data } = await supabase
+            .from('employees')
+            .select('employee_id, name');
+          setEmployees(data);
+        }
+        fetchEmployees();
+      }, []);
+
+      const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        // Insert compensation package
+        const { data: compData } = await supabase
+          .from('compensation_packages')
+          .insert({
+            employee_id: formData.employee_id,
+            base_salary: parseFloat(formData.base_salary) || 0,
+            annual_bonus: parseFloat(formData.annual_bonus) || 0,
+            joining_bonus: parseFloat(formData.joining_bonus) || 0,
+            retention_bonus: parseFloat(formData.retention_bonus) || 0,
+            effective_date: new Date().toISOString().split('T')[0]
+          })
+          .select('compensation_id')
+          .single();
+
+        // Insert performance review
+        await supabase
+          .from('performance_reviews')
+          .insert({
+            employee_id: formData.employee_id,
+            review_year: parseInt(formData.review_year),
+            performance_rating: formData.performance_rating,
+            review_form_url: formData.review_form_url,
+            new_title: formData.new_title || null,
+            new_compensation_id: compData.compensation_id
+          });
+
+        navigate('/employees');
+      };
+
+      return (
+        <div className="p-6 max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold mb-4">Record Performance Review</h1>
+          <div className="space-y-4">
+            <select
+              name="employee_id"
+              value={formData.employee_id}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="">Select Employee</option>
+              {employees.map(emp => (
+                <option key={emp.employee_id} value={emp.employee_id}>{emp.name}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              name="review_year"
+              value={formData.review_year}
+              onChange={handleChange}
+              placeholder="Review Year"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <select
+              name="performance_rating"
+              value={formData.performance_rating}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="Exceeds Expectations">Exceeds Expectations</option>
+              <option value="Meets Expectations">Meets Expectations</option>
+              <option value="Needs Improvement">Needs Improvement</option>
+              <option value="Unsatisfactory">Unsatisfactory</option>
+            </select>
+            <input
+              type="url"
+              name="review_form_url"
+              value={formData.review_form_url}
+              onChange={handleChange}
+              placeholder="Review Form URL"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <input
+              type="text"
+              name="new_title"
+              value={formData.new_title}
+              onChange={handleChange}
+              placeholder="New Title (optional)"
+              className="w-full p-2 border rounded"
+            />
+            <input
+              type="number"
+              name="base_salary"
+              value={formData.base_salary}
+              onChange={handleChange}
+              placeholder="Base Salary"
+              className="w-full p-2 border rounded"
+              required
+            />
+            <input
+              type="number"
+              name="annual_bonus"
+              value={formData.annual_bonus}
+              onChange={handleChange}
+              placeholder="Annual Bonus"
+              className="w-full p-2 border rounded"
+            />
+            <input
+              type="number"
+              name="joining_bonus"
+              value={formData.joining_bonus}
+              onChange={handleChange}
+              placeholder="Joining Bonus"
+              className="w-full p-2 border rounded"
+            />
+            <input
+              type="number"
+              name="retention_bonus"
+              value={formData.retention_bonus}
+              onChange={handleChange}
+              placeholder="Retention Bonus"
+              className="w-full p-2 border rounded"
+            />
+            <button
+              onClick={handleSubmit}
+              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+            >
+              Submit Review
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Employee Viewer Component
+    function EmployeeViewer() {
+      const { employeeId } = useParams();
+      const [employee, setEmployee] = React.useState(null);
+      const [compensation, setCompensation] = React.useState([]);
+
+      React.useEffect(() => {
+        async function fetchEmployeeData() {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('employee_id', employeeId)
+            .single();
+          const { data: compData } = await supabase
+            .from('compensation_packages')
+            .select('*')
+            .eq('employee_id', employeeId)
+            .order('effective_date', { ascending: true });
+          setEmployee(empData);
+          setCompensation(compData);
+        }
+        fetchEmployeeData();
+      }, [employeeId]);
+
+      const chartData = {
+        labels: compensation.map(c => c.effective_date),
+        datasets: [
+          {
+            label 'Base Salary',
+            data: compensation.map(c => c.base_salary),
+            borderColor: 'rgba(75, 192, 192, 1)',
+            fill: false
+          },
+          {
+            label: 'Annual Bonus',
+            data: compensation.map(c => c.annual_bonus || 0),
+            borderColor: 'rgba(255, 99, 132, 1)',
+            fill: false
+          }
+        ]
+      };
+
+      return (
+        <div className="p-6">
+          {employee && (
+            <>
+              <h1 className="text-2xl font-bold mb-4">{employee.name}'s Profile</h1>
+              <p><strong>Title:</strong> {employee.title}</p>
+              <p><strong>Email:</strong> {employee.email}</p>
+              <p><strong>Join Date:</strong> {employee.join_date}</p>
+              <h2 className="text-xl font-semibold mt-4 mb-2">Compensation History</h2>
+              <table className="w-full bg-white shadow rounded mb-4">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="p-2 text-left">Effective Date</th>
+                    <th className="p-2 text-left">Base Salary</th>
+                    <th className="p-2 text-left">Annual Bonus</th>
+                    <th className="p-2 text-left">Joining Bonus</th>
+                    <th className="p-2 text-left">Retention Bonus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compensation.map(comp => (
+                    <tr key={comp.compensation_id}>
+                      <td className="p-2">{comp.effective_date}</td>
+                      <td className="p-2">${comp.base_salary.toLocaleString()}</td>
+                      <td className="p-2">${(comp.annual_bonus || 0).toLocaleString()}</td>
+                      <td className="p-2">${(comp.joining_bonus || 0).toLocaleString()}</td>
+                      <td className="p-2">${(comp.retention_bonus || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <h2 className="text-xl font-semibold mb-2">Compensation Trend</h2>
+              <div className="bg-white p-4 shadow rounded">
+                <Line data={chartData} options={{ responsive: true }} />
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // Main App Component
+    function App() {
+      return (
+        <BrowserRouter>
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/employees" element={<EmployeeList />} />
+            <Route path="/employees/add" element={<EmployeeForm />} />
+            <Route path="/employees/edit/:employeeId" element={<EmployeeForm />} />
+            <Route path="/employees/view/:employeeId" element={<EmployeeViewer />} />
+            <Route path="/performance" element={<PerformanceReviewForm />} />
+          </Routes>
+        </BrowserRouter>
+      );
+    }
+
+    // Render the App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
 </html>
